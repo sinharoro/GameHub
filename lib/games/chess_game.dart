@@ -836,13 +836,19 @@ class _ChessGameState extends BaseGameState<ChessGame> {
                         ),
                         child: Stack(
                           children: [
-                            if (isLegalMove && !isDark)
+                            if (isLegalMove && board[r][c].isNotEmpty)
+                              Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.7), width: 2),
+                                ),
+                              ),
+                            if (isLegalMove)
                               Center(
                                 child: Container(
-                                  width: 10,
-                                  height: 10,
+                                  width: 12,
+                                  height: 12,
                                   decoration: BoxDecoration(
-                                    color: AppColors.green.withValues(alpha: 0.35),
+                                    color: Colors.white.withValues(alpha: 0.55),
                                     shape: BoxShape.circle,
                                   ),
                                 ),

@@ -247,9 +247,6 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
       HapticFeedback.heavyImpact();
     } else {
       HapticFeedback.lightImpact();
-      setState(() {
-        isPlayer1Turn = !isPlayer1Turn;
-      });
     }
 
     bool p1FleetDestroyed = p1Ships.every((s) =>
@@ -271,6 +268,10 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
       draws++;
       await saveDraw();
       if (mounted) _showDrawDialog();
+    } else {
+      setState(() {
+        isPlayer1Turn = !isPlayer1Turn;
+      });
     }
   }
 
@@ -324,8 +325,36 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
                   const SizedBox(height: 10),
                   if (phase == SeaBattlePhase.battle) ...[
                     _buildBattleHeader(),
-                    Expanded(child: isPlayer1Turn ? _buildBattleGrid() : _buildEnemyGrid()),
-                    Expanded(child: isPlayer1Turn ? _buildEnemyGrid() : _buildBattleGrid()),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                            "YOUR FLEET",
+                            style: TextStyle(
+                              color: isPlayer1Turn ? AppColors.cyan : AppColors.pink,
+                              fontSize: 10,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          Expanded(child: isPlayer1Turn ? _buildBattleGrid() : _buildEnemyGrid()),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                            "ATTACK",
+                            style: TextStyle(
+                              color: isPlayer1Turn ? AppColors.cyan : AppColors.pink,
+                              fontSize: 10,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          Expanded(child: isPlayer1Turn ? _buildEnemyGrid() : _buildBattleGrid()),
+                        ],
+                      ),
+                    ),
                   ] else ...[
                     _buildPlacementHeader(),
                     Expanded(child: _buildPlacementGrid()),
@@ -586,14 +615,19 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
         ),
         itemCount: 100,
         itemBuilder: (context, index) {
-          bool wasHit = p2Ships.any((s) => s.cells.contains(index)) && p1Guesses.contains(index);
-          bool wasMiss = !p2Ships.any((s) => s.cells.contains(index)) && p1Guesses.contains(index);
+          bool hasShip = p1Ships.any((s) => s.cells.contains(index));
+          bool wasHit = hasShip && p2Guesses.contains(index);
+          bool wasMiss = !hasShip && p2Guesses.contains(index);
 
           return Container(
             decoration: BoxDecoration(
-              color: wasHit ? AppColors.pink.withValues(alpha: 0.2) : (wasMiss ? AppColors.glassBase : AppColors.glassBase),
+              color: wasHit
+                  ? AppColors.pink.withValues(alpha: 0.2)
+                  : (wasMiss
+                      ? AppColors.glassBase
+                      : (hasShip ? AppColors.cyan.withValues(alpha: 0.15) : AppColors.glassBase)),
               borderRadius: BorderRadius.circular(2),
-              border: Border.all(color: wasHit ? AppColors.pink : AppColors.glassBorder),
+              border: Border.all(color: wasHit ? AppColors.pink : (hasShip ? AppColors.cyan : AppColors.glassBorder)),
             ),
             child: Center(
               child: wasHit

@@ -10,6 +10,7 @@ import '../screens/rankings_screen.dart';
 import '../games/tic_tac_toe.dart';
 import '../games/sea_battle.dart';
 import '../games/chess_game.dart';
+import 'package:rama_app/games/checkers.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -208,18 +209,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void showCheckersDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Checkers"),
-          content: const Text("This is where your checkers logic or UI goes."),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text("Close"),
-            ),
-          ],
-        );
-      },
+      barrierDismissible: true,
+      builder: (context) => CheckersPage(
+        p1: "YourValue1",
+        p2: "YourValue2",
+      ),
     );
   }
 }
