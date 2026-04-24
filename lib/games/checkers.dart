@@ -1,35 +1,43 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../core/app_theme.dart';
-import '../core/app_widgets.dart';
-import '../core/page_transitions.dart';
-import '../models/base_game.dart';
+import 'dart:ui';
 import '../models/game.dart';
+import '../models/game_score.dart';
+import '../services/database_service.dart';
 
-enum PieceType { player1, player2, p1King, p2King }
+class CheckersPage extends StatefulWidget {
+  final String p1;
+  final String p2;
 
-class CheckersPage extends BaseGameWidget {
-  const CheckersPage({super.key, required super.p1, required super.p2})
-      : super(gameType: GameType.checkers);
+  const CheckersPage({super.key, required this.p1, required this.p2});
 
   @override
   State<CheckersPage> createState() => _CheckersPageState();
 }
 
-class _CheckersPageState extends BaseGameState<CheckersPage> {
+enum PieceType { player1, player2, p1King, p2King }
+
+class _CheckersPageState extends State<CheckersPage> {
+  // --- DESIGN TOKENS ---
+  static const Color bgColor = Color(0xFF0D1117);
+  static const Color glassBase = Color(0x1AFFFFFF);
+  static const Color glassBorder = Color(0x33FFFFFF);
+  static const Color neonCyan = Color(0xFF00FBFF);
+  static const Color neonPink = Color(0xFFFF006E);
+
+  final DatabaseService _db = DatabaseService();
+
+  // --- GAME STATE ---
   late List<PieceType?> board;
   int? selectedIndex;
   bool isPlayer1Turn = true;
   List<int> validMoves = [];
   bool multiJumpActive = false;
+
+  // --- SCORE TRACKING ---
   int p1Pieces = 12;
   int p2Pieces = 12;
-
-  int _movesWithoutCapture = 0;
-  bool _showKingOverlay = false;
-  String? _kingOverlayMessage;
+  int p1Wins = 0; // Persistent Win Count
+  int p2Wins = 0; // Persistent Win Count
 
   @override
   void initState() {
@@ -52,11 +60,7 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
       validMoves = [];
       isPlayer1Turn = true;
       multiJumpActive = false;
-      _movesWithoutCapture = 0;
       _updatePieceCounts();
-      p1Wins = 0;
-      p2Wins = 0;
-      draws = 0;
     });
   }
 
@@ -81,16 +85,10 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
       return;
     }
 
-    bool globalJumpAvailable = _canAnyPieceJump();
-
     if (board[index] != null && _isOwnPiece(board[index]!)) {
-      List<int> moves = _getValidMoves(index);
-      if (globalJumpAvailable && !moves.any((m) => _isJumpMove(index, m))) {
-        return;
-      }
       setState(() {
         selectedIndex = index;
-        validMoves = moves;
+        validMoves = _getValidMoves(index);
       });
     } else if (selectedIndex != null && validMoves.contains(index)) {
       _movePiece(selectedIndex!, index);
@@ -100,13 +98,8 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
   bool _isOwnPiece(PieceType piece) {
     if (isPlayer1Turn) {
       return piece == PieceType.player1 || piece == PieceType.p1King;
-    } else {
-      return piece == PieceType.player2 || piece == PieceType.p2King;
     }
-  }
-
-  bool _isJumpMove(int from, int to) {
-    return (to - from).abs() > 10;
+    return piece == PieceType.player2 || piece == PieceType.p2King;
   }
 
   List<int> _getValidMoves(int index) {
@@ -116,7 +109,8 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
     if (piece == null) return [];
 
     bool isKing = piece == PieceType.p1King || piece == PieceType.p2King;
-    List<int> rowDirs = isKing ? [-1, 1] : (piece == PieceType.player1 ? [-1] : [1]);
+    List<int> rowDirs =
+        isKing ? [-1, 1] : (piece == PieceType.player1 ? [-1] : [1]);
 
     for (int rd in rowDirs) {
       for (int cd in [-1, 1]) {
@@ -139,7 +133,11 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
     }
 
     if (multiJumpActive) return jumpMoves;
-    return jumpMoves.isNotEmpty ? jumpMoves : simpleMoves;
+
+    bool globalJumpAvailable = _canAnyPieceJump();
+    return jumpMoves.isNotEmpty
+        ? jumpMoves
+        : (globalJumpAvailable ? [] : simpleMoves);
   }
 
   bool _canAnyPieceJump() {
@@ -165,7 +163,9 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
         int jRow = tRow + rd, jCol = tCol + cd;
         if (_inBounds(jRow, jCol)) {
           int tIdx = tRow * 8 + tCol, jIdx = jRow * 8 + jCol;
-          if (board[tIdx] != null && !_isOwnPiece(board[tIdx]!) && board[jIdx] == null) {
+          if (board[tIdx] != null &&
+              !_isOwnPiece(board[tIdx]!) &&
+              board[jIdx] == null) {
             jumps.add(jIdx);
           }
         }
@@ -185,24 +185,13 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
       if (captured) {
         board[(from + to) ~/ 2] = null;
         _updatePieceCounts();
-        _movesWithoutCapture = 0;
-      } else {
-        _movesWithoutCapture++;
       }
 
-      bool justKinged = false;
       if (to ~/ 8 == 0 && board[to] == PieceType.player1) {
         board[to] = PieceType.p1King;
-        justKinged = true;
       }
       if (to ~/ 8 == 7 && board[to] == PieceType.player2) {
         board[to] = PieceType.p2King;
-        justKinged = true;
-      }
-
-      if (justKinged) {
-        HapticFeedback.mediumImpact();
-        _showKingPromotionOverlay();
       }
 
       if (captured) {
@@ -220,135 +209,146 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
       multiJumpActive = false;
       isPlayer1Turn = !isPlayer1Turn;
 
-      _checkGameEnd();
-    });
-  }
-
-  void _showKingPromotionOverlay() {
-    setState(() {
-      _showKingOverlay = true;
-      _kingOverlayMessage = "KING!";
-    });
-    Future.delayed(const Duration(milliseconds: 1200), () {
-      if (mounted) setState(() => _showKingOverlay = false);
-    });
-  }
-
-  void _checkGameEnd() {
-    bool p1HasLegalMoves = _hasAnyLegalMove(forPlayer1: true);
-    bool p2HasLegalMoves = _hasAnyLegalMove(forPlayer1: false);
-
-    if (p1Pieces == 0 || !p2HasLegalMoves) {
-      _saveAndShowEnd(true);
-    } else if (p2Pieces == 0 || !p1HasLegalMoves) {
-      _saveAndShowEnd(false);
-    } else if (_movesWithoutCapture >= 80) {
-      _saveAndShowDraw();
-    }
-  }
-
-  bool _hasAnyLegalMove({required bool forPlayer1}) {
-    for (int i = 0; i < 64; i++) {
-      if (board[i] != null) {
-        bool isP1 = board[i] == PieceType.player1 || board[i] == PieceType.p1King;
-        if (isP1 != forPlayer1) continue;
-        if (_getValidMoves(i).isNotEmpty) return true;
+      if (p1Pieces == 0 || p2Pieces == 0) {
+        if (p1Pieces == 0) {
+          p2Wins++;
+          _saveResult(widget.p2);
+        } else {
+          p1Wins++;
+          _saveResult(widget.p1);
+        }
+        _showWinDialog();
       }
-    }
-    return false;
+    });
   }
 
-  Future<void> _saveAndShowEnd(bool p2Won) async {
-    if (p2Won) {
-      await saveP2Win();
-    } else {
-      await saveP1Win();
-    }
-    if (mounted) {
-      String winner = p2Won ? widget.p2 : widget.p1;
-      Color winColor = p2Won ? AppColors.pink : AppColors.cyan;
-      showResultDialog(
-        title: "VICTORY",
-        message: "$winner VICTORIOUS",
-        color: winColor,
-      );
-    }
+  Future<void> _saveResult(String winner) async {
+    final game = Game(
+        type: GameType.checkers,
+        player1Name: widget.p1,
+        player2Name: widget.p2,
+        winner: winner);
+    await _db.saveGame(game);
+    await _db.updateOrCreatePlayer(widget.p1);
+    await _db.updateOrCreatePlayer(widget.p2);
+    await _db.saveGameScore(GameScore(
+        playerName: widget.p1,
+        gameId: GameType.checkers.index,
+        wins: winner == widget.p1 ? 1 : 0,
+        losses: winner == widget.p2 ? 1 : 0,
+        totalPoints: winner == widget.p1 ? 3 : 0));
+    await _db.saveGameScore(GameScore(
+        playerName: widget.p2,
+        gameId: GameType.checkers.index,
+        wins: winner == widget.p2 ? 1 : 0,
+        losses: winner == widget.p1 ? 1 : 0,
+        totalPoints: winner == widget.p2 ? 3 : 0));
   }
 
-  Future<void> _saveAndShowDraw() async {
-    try {
-      await saveDraw();
-    } catch (_) {}
-    if (mounted) {
-      showResultDialog(
-        title: "DRAW",
-        message: "40-move rule reached",
-        color: AppColors.amber,
-        isDraw: true,
-      );
-    }
-  }
+  void _showWinDialog() {
+    String winner = p1Pieces == 0 ? widget.p2 : widget.p1;
+    Color winColor = p1Pieces == 0 ? neonPink : neonCyan;
 
-  @override
-  void onRematch() {
-    _resetGame();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 280,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: bgColor.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(
+                  color: winColor.withValues(alpha: 0.5), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                    color: winColor.withValues(alpha: 0.2),
+                    blurRadius: 20,
+                    spreadRadius: 5)
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.emoji_events_outlined, color: winColor, size: 50),
+                  const SizedBox(height: 16),
+                  Text("$winner VICTORIOUS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          color: winColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2)),
+                  const SizedBox(height: 12),
+                  const Text(
+                      "Fleet objectives completed. Systems ready for redeployment.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  const SizedBox(height: 24),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                      _resetGame();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 12, horizontal: 32),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: winColor),
+                        boxShadow: [
+                          BoxShadow(
+                              color: winColor.withValues(alpha: 0.1),
+                              blurRadius: 4)
+                        ],
+                      ),
+                      child: Text("REDEPLOY",
+                          style: TextStyle(
+                              color: winColor,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: bgColor,
       body: Container(
         decoration: BoxDecoration(
           gradient: RadialGradient(
             colors: [
-              isPlayer1Turn ? AppColors.cyan.withValues(alpha: 0.05) : AppColors.pink.withValues(alpha: 0.05),
-              AppColors.bg,
+              isPlayer1Turn
+                  ? neonCyan.withValues(alpha: 0.05)
+                  : neonPink.withValues(alpha: 0.05),
+              bgColor
             ],
             radius: 1.5,
           ),
         ),
         child: SafeArea(
-          child: Stack(
+          child: Column(
             children: [
-              Column(
-                children: [
-                  _buildTopBar(),
-                  const SizedBox(height: 10),
-                  buildScoreDashboard(),
-                  const SizedBox(height: 20),
-                  _buildTurnIndicator(),
-                  Expanded(child: Center(child: _buildBoard())),
-                  const SizedBox(height: 40),
-                ],
-              ),
-              if (_showKingOverlay)
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                    decoration: BoxDecoration(
-                      color: AppColors.amber.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(15),
-                      boxShadow: [
-                        BoxShadow(color: AppColors.amber.withValues(alpha: 0.5), blurRadius: 30),
-                      ],
-                    ),
-                    child: Text(
-                      _kingOverlayMessage ?? "KING!",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 4,
-                      ),
-                    ),
-                  ).animate().scale(
-                    begin: const Offset(0.5, 0.5),
-                    end: const Offset(1, 1),
-                    duration: 300.ms,
-                    curve: Curves.elasticOut,
-                  ).then().fadeOut(delay: 800.ms),
-                ),
+              _buildTopBar(),
+              const SizedBox(height: 10),
+              _buildScoreBoard(),
+              const SizedBox(height: 20),
+              _buildTurnIndicator(),
+              Expanded(child: Center(child: _buildBoard())),
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -362,128 +362,130 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
+              icon: const Icon(Icons.arrow_back_ios_new,
+                  color: Colors.white, size: 20),
+              onPressed: () => Navigator.pop(context)),
           const Spacer(),
-          const Text("CHECKERS OS", style: TextStyle(color: Colors.white24, fontSize: 10, letterSpacing: 2)),
+          const Text("CHECKERS OS",
+              style: TextStyle(
+                  color: Colors.white24, fontSize: 10, letterSpacing: 2)),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white38),
-            onPressed: _resetGame,
-          ),
+              icon: const Icon(Icons.refresh, color: Colors.white38),
+              onPressed: _resetGame),
         ],
       ),
     );
   }
 
-  Widget _buildTurnIndicator() {
-    Color activeColor = isPlayer1Turn ? AppColors.cyan : AppColors.pink;
-    String playerName = isPlayer1Turn ? widget.p1 : widget.p2;
-    bool globalJumpAvailable = _canAnyPieceJump();
-    String subtext = multiJumpActive
-        ? "CHAIN ATTACK"
-        : (globalJumpAvailable ? "MUST CAPTURE" : "YOUR MOVE");
-
-    return Column(
-      children: [
-        Text(
-          playerName.length > 12 ? '${playerName.substring(0, 12)}..' : playerName,
-          style: TextStyle(
-            color: activeColor,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 4,
-            shadows: [Shadow(color: activeColor, blurRadius: 10)],
-          ),
-        ),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: globalJumpAvailable ? AppColors.checkRed.withValues(alpha: 0.2) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: globalJumpAvailable ? Border.all(color: AppColors.checkRed) : null,
-          ),
-          child: Text(
-            subtext,
-            style: TextStyle(
-              color: globalJumpAvailable ? AppColors.checkRed : Colors.white24,
-              fontSize: 8,
-              letterSpacing: 2,
-              fontWeight: globalJumpAvailable ? FontWeight.bold : FontWeight.normal,
+  Widget _buildScoreBoard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
+            decoration: BoxDecoration(
+                color: glassBase,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: glassBorder)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _scoreItem("P1 PIECES", p1Pieces, neonCyan),
+                _scoreItem("P1 WINS", p1Wins, neonCyan, isSmall: true),
+                Container(width: 1, height: 30, color: glassBorder),
+                _scoreItem("P2 WINS", p2Wins, neonPink, isSmall: true),
+                _scoreItem("P2 PIECES", p2Pieces, neonPink),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _scoreItem(String label, int count, Color color,
+      {bool isSmall = false}) {
+    return Column(
+      children: [
+        Text(label,
+            style: TextStyle(
+                color: color.withValues(alpha: 0.5),
+                fontSize: isSmall ? 8 : 10,
+                fontWeight: FontWeight.bold)),
+        Text("$count",
+            style: TextStyle(
+                color: color,
+                fontSize: isSmall ? 14 : 20,
+                fontWeight: FontWeight.w900,
+                shadows: [Shadow(color: color, blurRadius: 10)])),
+      ],
+    );
+  }
+
+  Widget _buildTurnIndicator() {
+    Color activeColor = isPlayer1Turn ? neonCyan : neonPink;
+    String playerName = isPlayer1Turn ? widget.p1 : widget.p2;
+    String displayName = playerName.length > 10
+        ? '${playerName.substring(0, 10)}...'
+        : playerName;
+    return Column(
+      children: [
+        Text(displayName,
+            style: TextStyle(
+                color: activeColor,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 4,
+                shadows: [Shadow(color: activeColor, blurRadius: 10)])),
+        const SizedBox(height: 4),
+        Text(multiJumpActive ? "CHAIN ATTACK ACTIVE" : "YOUR MOVE COMMANDER",
+            style: const TextStyle(
+                color: Colors.white24, fontSize: 8, letterSpacing: 2)),
       ],
     );
   }
 
   Widget _buildBoard() {
     double size = MediaQuery.of(context).size.width - 40;
-    bool globalJumpAvailable = _canAnyPieceJump();
-
     return Container(
       width: size,
       height: size,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.glassBase,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
+          color: glassBase,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: glassBorder)),
       child: GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 8),
+        gridDelegate:
+            const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 8),
         itemCount: 64,
         itemBuilder: (context, index) {
           int row = index ~/ 8, col = index % 8;
           bool isDark = (row + col) % 2 != 0;
           bool isSelected = selectedIndex == index;
           bool isValid = validMoves.contains(index);
-          bool isJumpAvailablePiece = false;
-
-          if (globalJumpAvailable && !multiJumpActive) {
-            if (board[index] != null && _isOwnPiece(board[index]!) && _calculatePotentialJumps(index).isNotEmpty) {
-              isJumpAvailablePiece = true;
-            }
-          }
-
           return GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              _onTap(index);
-            },
+            onTap: () => _onTap(index),
             child: Container(
               margin: const EdgeInsets.all(1),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.cyan.withValues(alpha: 0.2)
-                    : (isDark ? Colors.white.withValues(alpha: 0.03) : Colors.transparent),
+                    ? neonCyan.withValues(alpha: 0.2)
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.03)
+                        : Colors.transparent),
                 borderRadius: BorderRadius.circular(4),
-                border: isJumpAvailablePiece
-                    ? Border.all(color: AppColors.checkRed, width: 2)
-                    : (isValid ? Border.all(color: Colors.white54, width: 1) : (isSelected ? Border.all(color: AppColors.cyan, width: 1) : null)),
+                border: isValid
+                    ? Border.all(color: Colors.white54, width: 1)
+                    : (isSelected
+                        ? Border.all(color: neonCyan, width: 1)
+                        : null),
               ),
-              child: Stack(
-                children: [
-                  if (isJumpAvailablePiece)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: AppColors.checkRed, width: 2),
-                        ),
-                      ).animate(
-                        onComplete: (c) => c.repeat(),
-                      ).scale(
-                        begin: const Offset(0.95, 0.95),
-                        end: const Offset(1.05, 1.05),
-                        duration: 500.ms,
-                      ),
-                    ),
-                  Center(child: _buildPiece(board[index], index)),
-                ],
-              ),
+              child: Center(child: _buildPiece(board[index], index)),
             ),
           );
         },
@@ -498,15 +500,13 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-            )
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle))
           : const SizedBox();
     }
     bool isP1 = type == PieceType.player1 || type == PieceType.p1King;
     bool isKing = type == PieceType.p1King || type == PieceType.p2King;
-    Color pColor = isP1 ? AppColors.cyan : AppColors.pink;
+    Color pColor = isP1 ? neonCyan : neonPink;
     return Container(
       width: 28,
       height: 28,
@@ -514,66 +514,11 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
         shape: BoxShape.circle,
         color: pColor.withValues(alpha: 0.2),
         border: Border.all(color: pColor, width: 2),
-        boxShadow: [BoxShadow(color: pColor.withValues(alpha: 0.3), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: pColor.withValues(alpha: 0.3), blurRadius: 8)
+        ],
       ),
-      child: isKing
-          ? Icon(Icons.star, color: pColor, size: 16)
-          : (isP1 ? null : null),
+      child: isKing ? Icon(Icons.star, color: pColor, size: 16) : null,
     );
   }
-}
-
-class CheckersLaunchDialog extends StatefulWidget {
-  const CheckersLaunchDialog({super.key});
-
-  @override
-  State<CheckersLaunchDialog> createState() => _CheckersLaunchDialogState();
-}
-
-class _CheckersLaunchDialogState extends State<CheckersLaunchDialog> {
-  final p1Controller = TextEditingController(text: "Player 1");
-  final p2Controller = TextEditingController(text: "Player 2");
-
-  @override
-  void dispose() {
-    p1Controller.dispose();
-    p2Controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-      child: AlertDialog(
-        backgroundColor: AppColors.bg.withValues(alpha: 0.9),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(25),
-          side: const BorderSide(color: AppColors.glassBorder),
-        ),
-        title: const NeonText(text: "INITIALIZE CHECKERS", color: AppColors.green, fontSize: 14),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            GlassInput(controller: p1Controller, hint: "Player 1", accentColor: AppColors.cyan),
-            const SizedBox(height: 15),
-            GlassInput(controller: p2Controller, hint: "Player 2", accentColor: AppColors.pink),
-            const SizedBox(height: 25),
-            GlassButton(
-              label: "LAUNCH",
-              color: AppColors.green,
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.push(context, slideUpRoute(page: CheckersPage(p1: p1Controller.text, p2: p2Controller.text)));
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-void showCheckersDialog(BuildContext context) {
-  showDialog(context: context, builder: (context) => const CheckersLaunchDialog());
 }

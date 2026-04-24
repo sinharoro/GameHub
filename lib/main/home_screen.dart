@@ -210,10 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => CheckersPage(
-        p1: "YourValue1",
-        p2: "YourValue2",
-      ),
+      builder: (context) => const CheckersPage(p1: 'value', p2: 'value'),
     );
   }
 }

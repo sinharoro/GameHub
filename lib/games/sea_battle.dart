@@ -8,7 +8,7 @@ import '../core/page_transitions.dart';
 import '../models/base_game.dart';
 import '../models/game.dart';
 
-enum SeaBattlePhase { p1Placement, p1ToP2Transition, p2Placement, battle }
+enum SeaBattlePhase { p1Placement, p1ToP2Transition, p2Placement, battle, battleTransition }
 
 enum ShipType { carrier, battleship, cruiser, submarine, destroyer }
 
@@ -191,7 +191,8 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
   }
 
   void _attack(int cell) async {
-    if (p1Guesses.contains(cell) || p2Guesses.contains(cell) || isProcessing) return;
+    final currentGuesses = isPlayer1Turn ? p1Guesses : p2Guesses;
+    if (currentGuesses.contains(cell) || isProcessing) return;
 
     setState(() {
       isProcessing = true;
@@ -270,9 +271,16 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
       if (mounted) _showDrawDialog();
     } else {
       setState(() {
-        isPlayer1Turn = !isPlayer1Turn;
+        phase = SeaBattlePhase.battleTransition;
       });
     }
+  }
+
+  void _confirmBattleTransition() {
+    setState(() {
+      isPlayer1Turn = !isPlayer1Turn;
+      phase = SeaBattlePhase.battle;
+    });
   }
 
   void _showWinDialog({required bool isPlayer1}) {
@@ -365,6 +373,7 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
                 ],
               ),
               if (phase == SeaBattlePhase.p1ToP2Transition) _buildTransitionOverlay(),
+              if (phase == SeaBattlePhase.battleTransition) _buildBattleTransitionOverlay(),
               if (lastHitWasSunk != null) _buildSunkBanner(),
               if (phase == SeaBattlePhase.battle) _buildBattleControls(),
             ],
@@ -665,8 +674,10 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
         ),
         itemCount: 100,
         itemBuilder: (context, index) {
-          bool wasHit = p1Ships.any((s) => s.cells.contains(index)) && p2Guesses.contains(index);
-          bool wasMiss = !p1Ships.any((s) => s.cells.contains(index)) && p2Guesses.contains(index);
+          final enemyShips = isPlayer1Turn ? p2Ships : p1Ships;
+          final myGuesses = isPlayer1Turn ? p1Guesses : p2Guesses;
+          bool wasHit = enemyShips.any((s) => s.cells.contains(index)) && myGuesses.contains(index);
+          bool wasMiss = !enemyShips.any((s) => s.cells.contains(index)) && myGuesses.contains(index);
 
           return GestureDetector(
             onTap: () {
@@ -757,6 +768,46 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
               label: "I AM ${widget.p2.toUpperCase()}",
               color: AppColors.pink,
               onPressed: _startP2Placement,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBattleTransitionOverlay() {
+    String nextPlayer = isPlayer1Turn ? widget.p2 : widget.p1;
+    Color nextColor = isPlayer1Turn ? AppColors.pink : AppColors.cyan;
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.85),
+        width: double.infinity,
+        height: double.infinity,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.vpn_key_outlined, color: nextColor, size: 80),
+            const SizedBox(height: 30),
+            Text(
+              "PASS DEVICE TO $nextPlayer",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "HIDDEN FROM VIEW",
+              style: TextStyle(color: Colors.white38, letterSpacing: 2),
+            ),
+            const SizedBox(height: 60),
+            GlassButton(
+              label: "I AM ${nextPlayer.toUpperCase()}",
+              color: nextColor,
+              onPressed: _confirmBattleTransition,
             ),
           ],
         ),
