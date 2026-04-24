@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:gamehub/core/app_theme.dart';
-import 'package:gamehub/main/home_screen.dart';
+import 'package:rama_app/core/app_theme.dart';
+import 'package:rama_app/main/home_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 void main() {

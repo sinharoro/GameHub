@@ -2,10 +2,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:gamehub/models/game.dart';
-import 'package:gamehub/models/game_score.dart';
-import 'package:gamehub/services/database_service.dart';
-import 'package:gamehub/core/app_theme.dart';
+import 'package:rama_app/models/game.dart';
+import 'package:rama_app/models/game_score.dart';
+import 'package:rama_app/services/database_service.dart';
+import 'package:rama_app/core/app_theme.dart';
 
 abstract class BaseGameWidget extends StatefulWidget {
   final String p1;
@@ -37,7 +37,8 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
   int _prevP2Wins = 0;
   int _prevDraws = 0;
 
-  Future<void> _saveGameResult(String winner, {bool isDraw = false, int p1Score = 0, int p2Score = 0}) async {
+  Future<void> _saveGameResult(String winner,
+      {bool isDraw = false, int p1Score = 0, int p2Score = 0}) async {
     try {
       final game = Game(
         type: widget.gameType,
@@ -136,7 +137,8 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
   }
 
   Widget _scoreStat(String label, int val, Color color, bool animating) {
-    String displayLabel = label.length > 8 ? '${label.substring(0, 8)}..' : label;
+    String displayLabel =
+        label.length > 8 ? '${label.substring(0, 8)}..' : label;
     Widget textWidget = Text(
       '$val',
       style: TextStyle(
@@ -149,11 +151,11 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
 
     if (animating) {
       textWidget = textWidget.animate().scale(
-        begin: const Offset(1.2, 1.2),
-        end: const Offset(1, 1),
-        duration: 400.ms,
-        curve: Curves.elasticOut,
-      );
+            begin: const Offset(1.2, 1.2),
+            end: const Offset(1, 1),
+            duration: 400.ms,
+            curve: Curves.elasticOut,
+          );
     }
 
     return Column(
@@ -239,7 +241,8 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
                     },
                     child: Text(
                       "EXIT",
-                      style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: Colors.white54, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
