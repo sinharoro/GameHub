@@ -98,8 +98,11 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
   }
 
   bool _isOwnPiece(PieceType piece) {
-    if (isPlayer1Turn) return piece == PieceType.player1 || piece == PieceType.p1King;
-    return piece == PieceType.player2 || piece == PieceType.p2King;
+    if (isPlayer1Turn) {
+      return piece == PieceType.player1 || piece == PieceType.p1King;
+    } else {
+      return piece == PieceType.player2 || piece == PieceType.p2King;
+    }
   }
 
   bool _isJumpMove(int from, int to) {
@@ -236,13 +239,10 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
     bool p2HasLegalMoves = _hasAnyLegalMove(forPlayer1: false);
 
     if (p1Pieces == 0 || !p2HasLegalMoves) {
-      p2Wins++;
       _saveAndShowEnd(true);
     } else if (p2Pieces == 0 || !p1HasLegalMoves) {
-      p1Wins++;
       _saveAndShowEnd(false);
     } else if (_movesWithoutCapture >= 80) {
-      draws++;
       _saveAndShowDraw();
     }
   }
@@ -259,9 +259,11 @@ class _CheckersPageState extends BaseGameState<CheckersPage> {
   }
 
   Future<void> _saveAndShowEnd(bool p2Won) async {
-    try {
+    if (p2Won) {
       await saveP2Win();
-    } catch (_) {}
+    } else {
+      await saveP1Win();
+    }
     if (mounted) {
       String winner = p2Won ? widget.p2 : widget.p1;
       Color winColor = p2Won ? AppColors.pink : AppColors.cyan;

@@ -324,8 +324,8 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
                   const SizedBox(height: 10),
                   if (phase == SeaBattlePhase.battle) ...[
                     _buildBattleHeader(),
-                    Expanded(child: _buildBattleGrid()),
-                    Expanded(child: _buildEnemyGrid()),
+                    Expanded(child: isPlayer1Turn ? _buildBattleGrid() : _buildEnemyGrid()),
+                    Expanded(child: isPlayer1Turn ? _buildEnemyGrid() : _buildBattleGrid()),
                   ] else ...[
                     _buildPlacementHeader(),
                     Expanded(child: _buildPlacementGrid()),
@@ -635,10 +635,10 @@ class _SeaBattlePageState extends BaseGameState<SeaBattlePage> {
           bool wasMiss = !p1Ships.any((s) => s.cells.contains(index)) && p2Guesses.contains(index);
 
           return GestureDetector(
-            onTap: isPlayer1Turn ? () {
+            onTap: () {
               HapticFeedback.lightImpact();
               _attack(index);
-            } : null,
+            },
             child: Container(
               decoration: BoxDecoration(
                 color: wasHit ? AppColors.cyan.withValues(alpha: 0.2) : AppColors.glassBase,

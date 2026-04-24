@@ -10,7 +10,6 @@ import '../screens/rankings_screen.dart';
 import '../games/tic_tac_toe.dart';
 import '../games/sea_battle.dart';
 import '../games/chess_game.dart';
-import '../games/checkers.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -51,7 +50,12 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 12),
         const GlassCard(
           padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Text("SELECT MISSION", style: TextStyle(color: AppColors.cyan, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 3)),
+          child: Text("SELECT MISSION",
+              style: TextStyle(
+                  color: AppColors.cyan,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                  letterSpacing: 3)),
         ),
       ],
     );
@@ -62,18 +66,22 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          Builder(builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white70),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          )),
+          Builder(
+              builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu, color: Colors.white70),
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  )),
           const Spacer(),
-          const Text("OS v1.0", style: TextStyle(color: Colors.white24, fontSize: 10)),
+          const Text("OS v1.0",
+              style: TextStyle(color: Colors.white24, fontSize: 10)),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.emoji_events_outlined, color: Colors.white70),
+            icon:
+                const Icon(Icons.emoji_events_outlined, color: Colors.white70),
             onPressed: () {
               HapticFeedback.lightImpact();
-              Navigator.push(context, slideUpRoute(page: const RankingsScreen()));
+              Navigator.push(
+                  context, slideUpRoute(page: const RankingsScreen()));
             },
           ),
         ],
@@ -88,15 +96,20 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisSpacing: 15,
       mainAxisSpacing: 15,
       children: [
-        _gameCard(0, "SEA BATTLE", Icons.directions_boat_rounded, AppColors.cyan, () => showSeaBattleDialog(context)),
-        _gameCard(1, "TIC TAC TOE", Icons.close_rounded, AppColors.pink, () => showTicTacToeDialog(context)),
-        _gameCard(2, "CHESS PRO", Icons.castle_rounded, AppColors.amber, () => showChessDialog(context)),
-        _gameCard(3, "CHECKERS", Icons.grid_view_rounded, AppColors.green, () => showCheckersDialog(context)),
+        _gameCard(0, "SEA BATTLE", Icons.directions_boat_rounded,
+            AppColors.cyan, () => showSeaBattleDialog(context)),
+        _gameCard(1, "TIC TAC TOE", Icons.close_rounded, AppColors.pink,
+            () => showTicTacToeDialog(context)),
+        _gameCard(2, "CHESS PRO", Icons.castle_rounded, AppColors.amber,
+            () => showChessDialog(context)),
+        _gameCard(3, "CHECKERS", Icons.grid_view_rounded, AppColors.green,
+            () => showCheckersDialog(context)),
       ],
     );
   }
 
-  Widget _gameCard(int index, String title, IconData icon, Color color, VoidCallback onTap) {
+  Widget _gameCard(
+      int index, String title, IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
@@ -115,7 +128,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 40, color: color, shadows: [Shadow(color: color.withValues(alpha: 0.5), blurRadius: 15)]),
+                Icon(icon, size: 40, color: color, shadows: [
+                  Shadow(color: color.withValues(alpha: 0.5), blurRadius: 15)
+                ]),
                 const SizedBox(height: 15),
                 Text(title, style: AppTextStyles.cardTitle),
               ],
@@ -123,16 +138,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    ).animate().fadeIn(
-      delay: Duration(milliseconds: 80 * index),
-      duration: 400.ms,
-    ).scale(
-      begin: const Offset(0.8, 0.8),
-      end: const Offset(1, 1),
-      delay: Duration(milliseconds: 80 * index),
-      duration: 400.ms,
-      curve: Curves.easeOutBack,
-    );
+    )
+        .animate()
+        .fadeIn(
+          delay: Duration(milliseconds: 80 * index),
+          duration: 400.ms,
+        )
+        .scale(
+          begin: const Offset(0.8, 0.8),
+          end: const Offset(1, 1),
+          delay: Duration(milliseconds: 80 * index),
+          duration: 400.ms,
+          curve: Curves.easeOutBack,
+        );
   }
 
   Widget _buildNeonDrawer() {
@@ -147,37 +165,61 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   NeonText(text: "GAME HUB", color: Colors.white, fontSize: 24),
                   SizedBox(height: 8),
-                  Text("v1.0.0", style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  Text("v1.0.0",
+                      style: TextStyle(color: Colors.white38, fontSize: 12)),
                 ],
               ),
             ),
             const Divider(color: AppColors.glassBorder),
             ListTile(
               leading: const Icon(Icons.emoji_events, color: AppColors.cyan),
-              title: const Text("SCORES", style: TextStyle(color: Colors.white)),
+              title:
+                  const Text("SCORES", style: TextStyle(color: Colors.white)),
               onTap: () {
                 HapticFeedback.lightImpact();
                 Navigator.pop(context);
-                Navigator.push(context, slideUpRoute(page: const ScoresScreen()));
+                Navigator.push(
+                    context, slideUpRoute(page: const ScoresScreen()));
               },
             ),
             ListTile(
               leading: const Icon(Icons.leaderboard, color: AppColors.pink),
-              title: const Text("RANKINGS", style: TextStyle(color: Colors.white)),
+              title:
+                  const Text("RANKINGS", style: TextStyle(color: Colors.white)),
               onTap: () {
                 HapticFeedback.lightImpact();
                 Navigator.pop(context);
-                Navigator.push(context, slideUpRoute(page: const RankingsScreen()));
+                Navigator.push(
+                    context, slideUpRoute(page: const RankingsScreen()));
               },
             ),
             const Spacer(),
             Padding(
               padding: const EdgeInsets.all(20),
-              child: Text("SYSTEM ACTIVE", style: TextStyle(color: Colors.white24, letterSpacing: 2)),
+              child: Text("SYSTEM ACTIVE",
+                  style: TextStyle(color: Colors.white24, letterSpacing: 2)),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void showCheckersDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Checkers"),
+          content: const Text("This is where your checkers logic or UI goes."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Close"),
+            ),
+          ],
+        );
+      },
     );
   }
 }

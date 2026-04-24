@@ -33,9 +33,9 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
   int p2Wins = 0;
   int draws = 0;
 
-  int get _lastP1Wins => p1Wins;
-  int get _lastP2Wins => p2Wins;
-  int get _lastDraws => draws;
+  int _prevP1Wins = 0;
+  int _prevP2Wins = 0;
+  int _prevDraws = 0;
 
   Future<void> _saveGameResult(String winner, {bool isDraw = false, int p1Score = 0, int p2Score = 0}) async {
     try {
@@ -48,11 +48,11 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
         player1Score: p1Score,
         player2Score: p2Score,
       );
-      db.saveGame(game);
-      db.updateOrCreatePlayer(widget.p1);
-      db.updateOrCreatePlayer(widget.p2);
+      await db.saveGame(game);
+      await db.updateOrCreatePlayer(widget.p1);
+      await db.updateOrCreatePlayer(widget.p2);
 
-      db.saveGameScore(GameScore(
+      await db.saveGameScore(GameScore(
         playerName: widget.p1,
         gameId: widget.gameType.index,
         wins: p1Score > p2Score ? 1 : 0,
@@ -61,7 +61,7 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
         totalPoints: isDraw ? 1 : (p1Score > p2Score ? 3 : 0),
       ));
 
-      db.saveGameScore(GameScore(
+      await db.saveGameScore(GameScore(
         playerName: widget.p2,
         gameId: widget.gameType.index,
         wins: p2Score > p1Score ? 1 : 0,
@@ -76,24 +76,27 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
 
   Future<void> saveP1Win({int p1Score = 1, int p2Score = 0}) async {
     HapticFeedback.mediumImpact();
+    _prevP1Wins = p1Wins;
     p1Wins++;
     await _saveGameResult(widget.p1, p1Score: p1Score, p2Score: p2Score);
   }
 
   Future<void> saveP2Win({int p1Score = 0, int p2Score = 1}) async {
     HapticFeedback.mediumImpact();
+    _prevP2Wins = p2Wins;
     p2Wins++;
     await _saveGameResult(widget.p2, p1Score: p1Score, p2Score: p2Score);
   }
 
   Future<void> saveDraw() async {
     HapticFeedback.lightImpact();
+    _prevDraws = draws;
     draws++;
     await _saveGameResult('', isDraw: true);
   }
 
   Widget buildScoreDashboard() {
-    return Padding(
+    Widget dashboard = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -109,15 +112,27 @@ abstract class BaseGameState<T extends BaseGameWidget> extends State<T> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _scoreStat(widget.p1, p1Wins, p1Color, _lastP1Wins != p1Wins),
-                _scoreStat('DRAWS', draws, Colors.white38, _lastDraws != draws),
-                _scoreStat(widget.p2, p2Wins, p2Color, _lastP2Wins != p2Wins),
+                _scoreStat(widget.p1, p1Wins, p1Color, _prevP1Wins != p1Wins),
+                _scoreStat('DRAWS', draws, Colors.white38, _prevDraws != draws),
+                _scoreStat(widget.p2, p2Wins, p2Color, _prevP2Wins != p2Wins),
               ],
             ),
           ),
         ),
       ),
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _prevP1Wins = p1Wins;
+          _prevP2Wins = p2Wins;
+          _prevDraws = draws;
+        });
+      }
+    });
+
+    return dashboard;
   }
 
   Widget _scoreStat(String label, int val, Color color, bool animating) {

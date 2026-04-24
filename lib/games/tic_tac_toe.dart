@@ -48,20 +48,24 @@ class _TicTacToeScreenState extends BaseGameState<TicTacToeScreen> {
         _saveRoundResult();
       } else if (!_board.any((row) => row.any((cell) => cell == ""))) {
         _gameOver = true;
-        draws++;
-        _checkMatchEnd();
+        _saveDrawResult();
       } else {
         _current = _current == "X" ? "O" : "X";
       }
     });
   }
 
-  void _saveRoundResult() {
+  void _saveRoundResult() async {
     if (_current == "X") {
-      p1Wins++;
+      await saveP1Win();
     } else {
-      p2Wins++;
+      await saveP2Win();
     }
+    _checkMatchEnd();
+  }
+
+  void _saveDrawResult() async {
+    await saveDraw();
     _checkMatchEnd();
   }
 

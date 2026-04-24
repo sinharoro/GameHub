@@ -6,6 +6,7 @@ import '../core/app_widgets.dart';
 import '../core/page_transitions.dart';
 import '../models/base_game.dart';
 import '../models/game.dart';
+import '../models/game_score.dart';
 
 class ChessGame extends BaseGameWidget {
   const ChessGame({super.key, required super.p1, required super.p2})
@@ -136,24 +137,24 @@ class _ChessGameState extends BaseGameState<ChessGame> {
         return false;
       case 'k':
         if ((fR - tR).abs() <= 1 && (fC - tC).abs() <= 1) return true;
-        if (fR == 0 && fC == 4 && tR == 0 && tC == 6 && !whiteKingMoved && !whiteHRookMoved &&
+        if (fR == 7 && fC == 4 && tR == 7 && tC == 6 && !whiteKingMoved && !whiteHRookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(true, b) &&
-            !_isSquareAttacked(0, 5, false, b) && !_isSquareAttacked(0, 6, false, b)) {
+            !_isSquareAttacked(7, 5, false, b) && !_isSquareAttacked(7, 6, false, b)) {
           return true;
         }
-        if (fR == 0 && fC == 4 && tR == 0 && tC == 2 && !whiteKingMoved && !whiteARookMoved &&
+        if (fR == 7 && fC == 4 && tR == 7 && tC == 2 && !whiteKingMoved && !whiteARookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(true, b) &&
-            !_isSquareAttacked(0, 3, false, b) && !_isSquareAttacked(0, 2, false, b)) {
+            !_isSquareAttacked(7, 3, false, b) && !_isSquareAttacked(7, 2, false, b)) {
           return true;
         }
-        if (fR == 7 && fC == 4 && tR == 7 && tC == 6 && !blackKingMoved && !blackHRookMoved &&
+        if (fR == 0 && fC == 4 && tR == 0 && tC == 6 && !blackKingMoved && !blackHRookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(false, b) &&
-            !_isSquareAttacked(7, 5, true, b) && !_isSquareAttacked(7, 6, true, b)) {
+            !_isSquareAttacked(0, 5, true, b) && !_isSquareAttacked(0, 6, true, b)) {
           return true;
         }
-        if (fR == 7 && fC == 4 && tR == 7 && tC == 2 && !blackKingMoved && !blackARookMoved &&
+        if (fR == 0 && fC == 4 && tR == 0 && tC == 2 && !blackKingMoved && !blackARookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(false, b) &&
-            !_isSquareAttacked(7, 3, true, b) && !_isSquareAttacked(7, 2, true, b)) {
+            !_isSquareAttacked(0, 3, true, b) && !_isSquareAttacked(0, 2, true, b)) {
           return true;
         }
         return false;
@@ -468,9 +469,27 @@ class _ChessGameState extends BaseGameState<ChessGame> {
         isDraw: winner == "DRAW",
         rounds: _moveHistory.length,
       );
-      db.saveGame(game);
-      db.updateOrCreatePlayer(widget.p1);
-      db.updateOrCreatePlayer(widget.p2);
+      await db.saveGame(game);
+      await db.updateOrCreatePlayer(widget.p1);
+      await db.updateOrCreatePlayer(widget.p2);
+
+      final bool isDraw = winner == "DRAW";
+      await db.saveGameScore(GameScore(
+        playerName: widget.p1,
+        gameId: widget.gameType.index,
+        wins: (!isDraw && winner == widget.p1) ? 1 : 0,
+        losses: (!isDraw && winner == widget.p2) ? 1 : 0,
+        draws: isDraw ? 1 : 0,
+        totalPoints: isDraw ? 1 : (winner == widget.p1 ? 3 : 0),
+      ));
+      await db.saveGameScore(GameScore(
+        playerName: widget.p2,
+        gameId: widget.gameType.index,
+        wins: (!isDraw && winner == widget.p2) ? 1 : 0,
+        losses: (!isDraw && winner == widget.p1) ? 1 : 0,
+        draws: isDraw ? 1 : 0,
+        totalPoints: isDraw ? 1 : (winner == widget.p2 ? 3 : 0),
+      ));
     } catch (e) {
       debugPrint('Database error: $e');
     }
