@@ -1,43 +1,32 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../core/app_theme.dart';
+import '../core/app_widgets.dart';
+import '../core/page_transitions.dart';
+import '../models/base_game.dart';
 import '../models/game.dart';
-import '../models/game_score.dart';
-import '../services/database_service.dart';
 
-const Color kBg = Color(0xFF0D1117);
-const Color kGlassBase = Color(0x1AFFFFFF);
-const Color kGlassBorder = Color(0x33FFFFFF);
-const Color kNeonCyan = Color(0xFF00FBFF);
-const Color kNeonPink = Color(0xFFFF006E);
-const Color kCheckRed = Color(0xFFFF4D4D);
-const Color kMoveHint = Color(0xFF39FF14);
-
-class ChessGame extends StatefulWidget {
-  final String p1;
-  final String p2;
-
-  const ChessGame({super.key, required this.p1, required this.p2});
+class ChessGame extends BaseGameWidget {
+  const ChessGame({super.key, required super.p1, required super.p2})
+      : super(gameType: GameType.chess);
 
   @override
   State<ChessGame> createState() => _ChessGameState();
 }
 
-class _ChessGameState extends State<ChessGame> {
+class _ChessGameState extends BaseGameState<ChessGame> {
   late List<List<String>> _initialBoard;
   late List<List<String>> board;
   int? selectedRow;
   int? selectedCol;
   bool isWhiteTurn = true;
   bool isGameOver = false;
-  final DatabaseService _db = DatabaseService();
 
-  // Move tracking
   final List<MoveRecord> _moveHistory = [];
   int _reviewIndex = -1;
   bool _isReviewMode = false;
 
-  // Castling tracking
   bool whiteKingMoved = false;
   bool blackKingMoved = false;
   bool whiteHRookMoved = false;
@@ -45,17 +34,12 @@ class _ChessGameState extends State<ChessGame> {
   bool blackHRookMoved = false;
   bool blackARookMoved = false;
 
-  // En passant tracking
   int? enPassantRow;
   int? enPassantCol;
 
-  // 50-move rule counter
   int _halfMoveClock = 0;
-
-  // Scores
-  int whiteWins = 0;
-  int blackWins = 0;
-  int draws = 0;
+  List<String> capturedByWhite = [];
+  List<String> capturedByBlack = [];
 
   @override
   void initState() {
@@ -92,6 +76,11 @@ class _ChessGameState extends State<ChessGame> {
       _moveHistory.clear();
       _reviewIndex = -1;
       _isReviewMode = false;
+      capturedByWhite.clear();
+      capturedByBlack.clear();
+      p1Wins = 0;
+      p2Wins = 0;
+      draws = 0;
     });
   }
 
@@ -119,15 +108,13 @@ class _ChessGameState extends State<ChessGame> {
     String piece = b[fR][fC].toLowerCase();
     String target = b[tR][tC];
 
-    if (target.isNotEmpty && _isWhite(target) == _isWhite(b[fR][fC]))
-      return false;
+    if (target.isNotEmpty && _isWhite(target) == _isWhite(b[fR][fC])) return false;
 
     switch (piece) {
       case 'r':
         return (fR == tR || fC == tC) && _isPathClear(fR, fC, tR, tC, b);
       case 'b':
-        return (fR - tR).abs() == (fC - tC).abs() &&
-            _isPathClear(fR, fC, tR, tC, b);
+        return (fR - tR).abs() == (fC - tC).abs() && _isPathClear(fR, fC, tR, tC, b);
       case 'q':
         return ((fR == tR || fC == tC) || (fR - tR).abs() == (fC - tC).abs()) &&
             _isPathClear(fR, fC, tR, tC, b);
@@ -137,32 +124,38 @@ class _ChessGameState extends State<ChessGame> {
       case 'p':
         int dir = _isWhite(b[fR][fC]) ? -1 : 1;
         if (fC == tC && target.isEmpty && tR == fR + dir) return true;
-        if (fC == tC &&
-            target.isEmpty &&
-            tR == fR + 2 * dir &&
-            (fR == 1 || fR == 6) &&
-            b[fR + dir][fC].isEmpty &&
-            _isPathClear(fR, fC, tR, tC, b)) return _isPathClear(fR, fC, tR, tC, b);
-        if ((fC - tC).abs() == 1 && tR == fR + dir && target.isNotEmpty)
+        if (fC == tC && target.isEmpty && tR == fR + 2 * dir &&
+            (fR == 1 || fR == 6) && b[fR + dir][fC].isEmpty && _isPathClear(fR, fC, tR, tC, b)) {
           return true;
+        }
+        if ((fC - tC).abs() == 1 && tR == fR + dir && target.isNotEmpty) return true;
         if ((fC - tC).abs() == 1 && tR == fR + dir && target.isEmpty &&
-            enPassantRow != null && tR == enPassantRow && tC == enPassantCol)
+            enPassantRow != null && tR == enPassantRow && tC == enPassantCol) {
           return true;
+        }
         return false;
       case 'k':
         if ((fR - tR).abs() <= 1 && (fC - tC).abs() <= 1) return true;
         if (fR == 0 && fC == 4 && tR == 0 && tC == 6 && !whiteKingMoved && !whiteHRookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(true, b) &&
-            !_isSquareAttacked(0, 5, false, b) && !_isSquareAttacked(0, 6, false, b)) return true;
+            !_isSquareAttacked(0, 5, false, b) && !_isSquareAttacked(0, 6, false, b)) {
+          return true;
+        }
         if (fR == 0 && fC == 4 && tR == 0 && tC == 2 && !whiteKingMoved && !whiteARookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(true, b) &&
-            !_isSquareAttacked(0, 3, false, b) && !_isSquareAttacked(0, 2, false, b)) return true;
+            !_isSquareAttacked(0, 3, false, b) && !_isSquareAttacked(0, 2, false, b)) {
+          return true;
+        }
         if (fR == 7 && fC == 4 && tR == 7 && tC == 6 && !blackKingMoved && !blackHRookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(false, b) &&
-            !_isSquareAttacked(7, 5, true, b) && !_isSquareAttacked(7, 6, true, b)) return true;
+            !_isSquareAttacked(7, 5, true, b) && !_isSquareAttacked(7, 6, true, b)) {
+          return true;
+        }
         if (fR == 7 && fC == 4 && tR == 7 && tC == 2 && !blackKingMoved && !blackARookMoved &&
             _isPathClear(fR, fC, tR, tC, b) && !_isKingInCheck(false, b) &&
-            !_isSquareAttacked(7, 3, true, b) && !_isSquareAttacked(7, 2, true, b)) return true;
+            !_isSquareAttacked(7, 3, true, b) && !_isSquareAttacked(7, 2, true, b)) {
+          return true;
+        }
         return false;
       default:
         return false;
@@ -213,8 +206,7 @@ class _ChessGameState extends State<ChessGame> {
   }
 
   bool _wouldBeInCheckAfterMove(int fR, int fC, int tR, int tC) {
-    List<List<String>> ghostBoard =
-        List.generate(8, (i) => List.from(board[i]));
+    List<List<String>> ghostBoard = List.generate(8, (i) => List.from(board[i]));
     ghostBoard[tR][tC] = ghostBoard[fR][fC];
     ghostBoard[fR][fC] = '';
     return _isKingInCheck(isWhiteTurn, ghostBoard);
@@ -269,15 +261,11 @@ class _ChessGameState extends State<ChessGame> {
     }
     if (pieces.length == 2) return true;
     if (pieces.length == 3 && (pieces.contains('n') || pieces.contains('b'))) return true;
-    if (pieces.length == 4 && pieces.where((p) => p == 'n' || p == 'b').length == 2) {
-      return true;
-    }
+    if (pieces.length == 4 && pieces.where((p) => p == 'n' || p == 'b').length == 2) return true;
     return false;
   }
 
-  String _toAlgebraic(int row, int col) {
-    return '${'abcdefgh'[col]}${8 - row}';
-  }
+  String _toAlgebraic(int row, int col) => '${'abcdefgh'[col]}${8 - row}';
 
   String _getPieceSymbol(String piece) {
     switch (piece.toLowerCase()) {
@@ -286,21 +274,24 @@ class _ChessGameState extends State<ChessGame> {
       case 'r': return 'R';
       case 'b': return 'B';
       case 'n': return 'N';
-      default: return '';
+      default: {
+        return '';
+      }
     }
   }
 
   String _getMoveNotation(int fR, int fC, int tR, int tC, String piece, bool captured, bool isCheck, bool isCheckmate) {
-    String notation = '';
     if (piece.toLowerCase() == 'k' && (fC - tC).abs() == 2) {
       return tC > fC ? 'O-O' : 'O-O-O';
     }
-    String pieceSym = _getPieceSymbol(piece);
-    if (pieceSym.isNotEmpty) notation += pieceSym;
+    String notation = _getPieceSymbol(piece);
     if (captured) notation += 'x';
     notation += _toAlgebraic(tR, tC);
-    if (isCheckmate) notation += '#';
-    else if (isCheck) notation += '+';
+    if (isCheckmate) {
+      notation += '#';
+    } else if (isCheck) {
+      notation += '+';
+    }
     return notation;
   }
 
@@ -319,7 +310,7 @@ class _ChessGameState extends State<ChessGame> {
           selectedCol = null;
         } else if (selectedRow != null && selectedCol != null && _isValidMove(selectedRow!, selectedCol!, r, c, board)) {
           if (_wouldBeInCheckAfterMove(selectedRow!, selectedCol!, r, c)) {
-            _showOSDialog("ILLEGAL MOVE", "You must protect your King!", kCheckRed);
+            _showOSDialog("ILLEGAL MOVE", "You must protect your King!", AppColors.checkRed);
           } else {
             _executeMove(selectedRow!, selectedCol!, r, c);
           }
@@ -338,16 +329,17 @@ class _ChessGameState extends State<ChessGame> {
     String piece = board[fR][fC];
     bool captured = board[tR][tC].isNotEmpty;
     bool wasEnPassant = false;
-    int? captureRow;
-    int? captureCol;
 
-    if (piece.toLowerCase() == 'p' && enPassantRow != null && 
+    if (piece.toLowerCase() == 'p' && enPassantRow != null &&
         tR == enPassantRow && tC == enPassantCol) {
-      captureRow = isWhiteTurn ? tR + 1 : tR - 1;
-      captureCol = tC;
-      board[captureRow][captureCol] = '';
+      int capturedRow = isWhiteTurn ? tR + 1 : tR - 1;
+      board[capturedRow][tC] = '';
       captured = true;
       wasEnPassant = true;
+    }
+
+    if (captured) {
+      capturedByWhite.add(board[tR][tC]);
     }
 
     if (piece.toLowerCase() == 'k' && (fC - tC).abs() == 2) {
@@ -358,20 +350,34 @@ class _ChessGameState extends State<ChessGame> {
         board[fR][3] = board[fR][0];
         board[fR][0] = '';
       }
-      if (isWhiteTurn) whiteKingMoved = true;
-      else blackKingMoved = true;
+      if (isWhiteTurn) {
+        whiteKingMoved = true;
+      } else {
+        blackKingMoved = true;
+      }
     }
 
     if (piece.toLowerCase() == 'r') {
-      if (fR == 0 && fC == 0) whiteARookMoved = true;
-      if (fR == 0 && fC == 7) whiteHRookMoved = true;
-      if (fR == 7 && fC == 0) blackARookMoved = true;
-      if (fR == 7 && fC == 7) blackHRookMoved = true;
+      if (fR == 0 && fC == 0) {
+        whiteARookMoved = true;
+      }
+      if (fR == 0 && fC == 7) {
+        whiteHRookMoved = true;
+      }
+      if (fR == 7 && fC == 0) {
+        blackARookMoved = true;
+      }
+      if (fR == 7 && fC == 7) {
+        blackHRookMoved = true;
+      }
     }
 
     if (piece.toLowerCase() == 'k') {
-      if (isWhiteTurn) whiteKingMoved = true;
-      else blackKingMoved = true;
+      if (isWhiteTurn) {
+        whiteKingMoved = true;
+      } else {
+        blackKingMoved = true;
+      }
     }
 
     board[tR][tC] = piece;
@@ -416,96 +422,91 @@ class _ChessGameState extends State<ChessGame> {
     _finishMove(isCheckmate);
   }
 
-void _showGameOverDialog() {
-    String winner = isWhiteTurn ? widget.p2 : widget.p1;
-    _showOSDialog(
-      "CHECKMATE",
-      "$winner WINS!",
-      kNeonPink,
-      showReview: true,
-    );
-  }
-
-  void _showDrawDialog(String title, String msg, Color color) {
-    _showOSDialog(
-      title,
-      msg,
-      kNeonCyan,
-      showReview: true,
-      isDraw: true,
-    );
-  }
-
-  Future<void> _saveResult(String winner) async {
-    final game = Game(
-      type: GameType.chess,
-      player1Name: widget.p1,
-      player2Name: widget.p2,
-      winner: winner,
-      rounds: _moveHistory.length,
-      isDraw: winner == "DRAW",
-    );
-    await _db.saveGame(game);
-    await _db.updateOrCreatePlayer(widget.p1);
-    await _db.updateOrCreatePlayer(widget.p2);
-    await _db.saveGameScore(GameScore(
-      playerName: widget.p1,
-      gameId: GameType.chess.index,
-      wins: winner == widget.p1 ? 1 : 0,
-      losses: winner == widget.p2 ? 1 : 0,
-      totalPoints: winner == widget.p1 ? 3 : 0,
-    ));
-    await _db.saveGameScore(GameScore(
-      playerName: widget.p2,
-      gameId: GameType.chess.index,
-      wins: winner == widget.p2 ? 1 : 0,
-      losses: winner == widget.p1 ? 1 : 0,
-      totalPoints: winner == widget.p2 ? 3 : 0,
-    ));
-  }
-
   void _finishMove(bool isCheckmate) {
     selectedRow = null;
     selectedCol = null;
 
     if (isCheckmate) {
       isGameOver = true;
+      HapticFeedback.mediumImpact();
       if (isWhiteTurn) {
-        blackWins++;
+        p2Wins++;
         _saveResult(widget.p2);
       } else {
-        whiteWins++;
+        p1Wins++;
         _saveResult(widget.p1);
       }
       _showGameOverDialog();
     } else if (_isStalemate(!isWhiteTurn)) {
       isGameOver = true;
+      HapticFeedback.lightImpact();
       draws++;
       _saveResult("DRAW");
-      _showDrawDialog("STALEMATE", "No legal moves available!", kNeonCyan);
+      _showDrawDialog("STALEMATE", "No legal moves available!", AppColors.cyan);
     } else if (_halfMoveClock >= 100) {
       isGameOver = true;
       draws++;
       _saveResult("DRAW");
-      _showDrawDialog("50-MOVE RULE", "No pawn move or capture in 50 moves!", kNeonCyan);
+      _showDrawDialog("50-MOVE RULE", "No pawn move or capture in 50 moves!", AppColors.cyan);
     } else if (_hasInsufficientMaterial()) {
       isGameOver = true;
       draws++;
       _saveResult("DRAW");
-      _showDrawDialog("INSUFFICIENT MATERIAL", "Cannot checkmate!", kNeonCyan);
+      _showDrawDialog("INSUFFICIENT MATERIAL", "Cannot checkmate!", AppColors.cyan);
     } else {
       isWhiteTurn = !isWhiteTurn;
     }
   }
 
-  void _showOSDialog(String title, String msg, Color color, {bool showReview = false, bool isDraw = false}) {
+  Future<void> _saveResult(String winner) async {
+    try {
+      final game = Game(
+        type: widget.gameType,
+        player1Name: widget.p1,
+        player2Name: widget.p2,
+        winner: winner == "DRAW" ? null : winner,
+        isDraw: winner == "DRAW",
+        rounds: _moveHistory.length,
+      );
+      db.saveGame(game);
+      db.updateOrCreatePlayer(widget.p1);
+      db.updateOrCreatePlayer(widget.p2);
+    } catch (e) {
+      debugPrint('Database error: $e');
+    }
+  }
+
+  void _showGameOverDialog() {
+    String winner = isWhiteTurn ? widget.p2 : widget.p1;
+    showResultDialog(
+      title: "CHECKMATE",
+      message: "$winner WINS!",
+      color: AppColors.pink,
+    );
+  }
+
+  void _showDrawDialog(String title, String msg, Color color) {
+    showResultDialog(
+      title: title,
+      message: msg,
+      color: color,
+      isDraw: true,
+    );
+  }
+
+  @override
+  void onRematch() {
+    _resetBoard();
+  }
+
+  void _showOSDialog(String title, String msg, Color color) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: AlertDialog(
-          backgroundColor: kBg.withValues(alpha: 0.9),
+          backgroundColor: AppColors.bg.withValues(alpha: 0.9),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(color: color),
@@ -522,30 +523,9 @@ void _showGameOverDialog() {
           ),
           actions: [
             Center(
-              child: Column(
-                children: [
-                  if (showReview)
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        setState(() => _isReviewMode = true);
-                      },
-                      child: Text(
-                        "REVIEW GAME",
-                        style: TextStyle(color: kNeonCyan, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _resetBoard();
-                    },
-                    child: Text(
-                      "NEW GAME",
-                      style: TextStyle(color: color, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text("OK", style: TextStyle(color: color, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -561,15 +541,15 @@ void _showGameOverDialog() {
       builder: (ctx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: AlertDialog(
-          backgroundColor: kBg.withValues(alpha: 0.9),
+          backgroundColor: AppColors.bg.withValues(alpha: 0.9),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: kNeonCyan),
+            side: const BorderSide(color: AppColors.cyan),
           ),
           title: const Text(
             "PROMOTION",
             textAlign: TextAlign.center,
-            style: TextStyle(color: kNeonCyan, fontWeight: FontWeight.w900),
+            style: TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w900),
           ),
           content: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -587,7 +567,7 @@ void _showGameOverDialog() {
 
   Widget _promotionPiece(String piece, bool isWhite, BuildContext ctx, int promotionRow, int promotionCol) {
     String p = isWhite ? piece : piece.toLowerCase();
-    Color color = isWhite ? Colors.white : kNeonPink;
+    Color color = isWhite ? Colors.white : AppColors.pink;
     IconData icon;
     switch (piece) {
       case 'Q': icon = Icons.workspace_premium_rounded; break;
@@ -601,15 +581,13 @@ void _showGameOverDialog() {
         Navigator.pop(ctx);
         board[promotionRow][promotionCol] = p;
         board[promotionRow - (isWhiteTurn ? 1 : -1)][promotionCol] = '';
+        HapticFeedback.mediumImpact();
         String notation = _getMoveNotation(
           promotionRow - (isWhiteTurn ? 1 : -1),
           promotionCol,
           promotionRow,
           promotionCol,
-          p,
-          true,
-          false,
-          false,
+          p, true, false, false,
         );
         _moveHistory.add(MoveRecord(
           notation: notation,
@@ -623,7 +601,6 @@ void _showGameOverDialog() {
           promotion: piece,
           castle: null,
         ));
-        
         _halfMoveClock = 0;
         _finishMove(_isCheckmate(!isWhiteTurn));
       },
@@ -658,7 +635,7 @@ void _showGameOverDialog() {
 
   @override
   Widget build(BuildContext context) {
-    Color turnColor = isWhiteTurn ? Colors.white : kNeonPink;
+    Color turnColor = isWhiteTurn ? Colors.white : AppColors.pink;
     bool inCheck = _isKingInCheck(isWhiteTurn, board);
     List<Position> legalMoves = [];
     if (selectedRow != null && selectedCol != null && !isGameOver && !_isReviewMode) {
@@ -666,11 +643,11 @@ void _showGameOverDialog() {
     }
 
     return Scaffold(
-      backgroundColor: kBg,
+      backgroundColor: AppColors.bg,
       body: Container(
         decoration: BoxDecoration(
           gradient: RadialGradient(
-            colors: [turnColor.withValues(alpha: 0.05), kBg],
+            colors: [turnColor.withValues(alpha: 0.05), AppColors.bg],
             radius: 1.2,
           ),
         ),
@@ -679,26 +656,60 @@ void _showGameOverDialog() {
             children: [
               _buildAppBar(),
               const SizedBox(height: 10),
-              _buildScoreDashboard(),
+              _buildCapturedPieces(),
+              const SizedBox(height: 10),
+              buildScoreDashboard(),
               const SizedBox(height: 20),
               _buildTurnIndicator(turnColor, inCheck),
-              Expanded(
-                child: _buildBoard(legalMoves),
-              ),
+              Expanded(child: _buildBoard(legalMoves)),
               const Text(
                 "SYSTEM STATUS: ROYAL_PROTOCOL_ACTIVE",
                 style: TextStyle(color: Colors.white10, fontSize: 10, letterSpacing: 2),
               ),
               const SizedBox(height: 8),
-              SizedBox(
-                height: 100,
-                child: _buildMoveHistory(),
-              ),
+              SizedBox(height: 100, child: _buildMoveHistory()),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildCapturedPieces() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 25),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Wrap(
+              spacing: 2,
+              children: capturedByWhite.map((p) => _getSmallPieceIcon(p, true)).toList(),
+            ),
+          ),
+          Expanded(
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 2,
+              children: capturedByBlack.map((p) => _getSmallPieceIcon(p, false)).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _getSmallPieceIcon(String p, bool isCaptureByWhite) {
+    IconData icon;
+    switch (p.toLowerCase()) {
+      case 'p': icon = Icons.circle; break;
+      case 'r': icon = Icons.castle_rounded; break;
+      case 'n': icon = Icons.psychology_alt_rounded; break;
+      case 'b': icon = Icons.explore_outlined; break;
+      case 'q': icon = Icons.workspace_premium_rounded; break;
+      default: icon = Icons.circle;
+    }
+    return Icon(icon, size: 12, color: Colors.white38);
   }
 
   Widget _buildAppBar() {
@@ -718,7 +729,7 @@ void _showGameOverDialog() {
           const Spacer(),
           if (_isReviewMode)
             IconButton(
-              icon: const Icon(Icons.close, color: kNeonCyan),
+              icon: const Icon(Icons.close, color: AppColors.cyan),
               onPressed: () => setState(() {
                 _isReviewMode = false;
                 _reviewIndex = -1;
@@ -734,72 +745,13 @@ void _showGameOverDialog() {
     );
   }
 
-  Widget _buildScoreDashboard() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 25),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-            decoration: BoxDecoration(
-              color: kGlassBase,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: kGlassBorder),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _scoreStat(widget.p1, whiteWins, Colors.white),
-                _scoreStat("DRAWS", draws, Colors.white38),
-                _scoreStat(widget.p2, blackWins, kNeonPink),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-Widget _scoreStat(String label, int val, Color color) {
-    String displayLabel = label.length > 8 ? '${label.substring(0, 8)}..' : label;
-    return Column(
-      children: [
-        Text(
-          displayLabel,
-          style: TextStyle(
-            color: color.withValues(alpha: 0.6),
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "$val",
-          style: TextStyle(
-            color: color,
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-            shadows: [if (val > 0) Shadow(color: color, blurRadius: 10)],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildTurnIndicator(Color color, bool inCheck) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: inCheck
-            ? kCheckRed.withValues(alpha: 0.15)
-            : color.withValues(alpha: 0.1),
+        color: inCheck ? AppColors.checkRed.withValues(alpha: 0.15) : color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: inCheck ? kCheckRed : color.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: inCheck ? AppColors.checkRed : color.withValues(alpha: 0.5)),
       ),
       child: Text(
         _isReviewMode
@@ -808,7 +760,7 @@ Widget _scoreStat(String label, int val, Color color) {
                 ? "KING IN CHECK"
                 : "${isWhiteTurn ? widget.p1 : widget.p2}'S TURN",
         style: TextStyle(
-          color: inCheck ? kCheckRed : color,
+          color: inCheck ? AppColors.checkRed : color,
           fontWeight: FontWeight.w900,
           letterSpacing: 2,
         ),
@@ -831,9 +783,9 @@ Widget _scoreStat(String label, int val, Color color) {
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: kGlassBase,
+                color: AppColors.glassBase,
                 borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: kGlassBorder),
+                border: Border.all(color: AppColors.glassBorder),
               ),
               child: AspectRatio(
                 aspectRatio: 1.0,
@@ -849,8 +801,7 @@ Widget _scoreStat(String label, int val, Color color) {
                     bool isDark = (r + c) % 2 != 0;
                     bool isSelected = selectedRow != null && selectedCol != null && selectedRow == r && selectedCol == c;
                     bool isLegalMove = legalMoves.any((m) => m.row == r && m.col == c);
-                    bool isKingAlert = (board[r][c] == 'K' && whiteCheck) ||
-                        (board[r][c] == 'k' && blackCheck);
+                    bool isKingAlert = (board[r][c] == 'K' && whiteCheck) || (board[r][c] == 'k' && blackCheck);
                     bool isMoveFrom = _moveHistory.any((m) => m.toRow == r && m.toCol == c);
 
                     return GestureDetector(
@@ -858,15 +809,11 @@ Widget _scoreStat(String label, int val, Color color) {
                       child: Container(
                         decoration: BoxDecoration(
                           color: isKingAlert
-                              ? kCheckRed.withValues(alpha: 0.4)
+                              ? AppColors.checkRed.withValues(alpha: 0.4)
                               : isMoveFrom
-                                  ? kNeonCyan.withValues(alpha: 0.15)
-                                  : (isDark
-                                      ? const Color(0xFF1A1F26)
-                                      : const Color(0xFF252A32)),
-                          border: isSelected
-                              ? Border.all(color: kNeonCyan, width: 2)
-                              : null,
+                                  ? AppColors.cyan.withValues(alpha: 0.15)
+                                  : (isDark ? const Color(0xFF1A1F26) : const Color(0xFF252A32)),
+                          border: isSelected ? Border.all(color: AppColors.cyan, width: 2) : null,
                         ),
                         child: Stack(
                           children: [
@@ -876,7 +823,7 @@ Widget _scoreStat(String label, int val, Color color) {
                                   width: 10,
                                   height: 10,
                                   decoration: BoxDecoration(
-                                    color: kMoveHint.withValues(alpha: 0.35),
+                                    color: AppColors.green.withValues(alpha: 0.35),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -911,61 +858,33 @@ Widget _scoreStat(String label, int val, Color color) {
     return Container(
       margin: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: kGlassBase.withValues(alpha: 0.5),
+        color: AppColors.glassBase.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kGlassBorder),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: kNeonCyan.withValues(alpha: 0.1),
+              color: AppColors.cyan.withValues(alpha: 0.1),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: const Center(
-              child: Text(
-                "MOVES",
-                style: TextStyle(
-                  color: kNeonCyan,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
+              child: Text("MOVES", style: TextStyle(color: AppColors.cyan, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
             ),
           ),
           if (_isReviewMode)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              color: kNeonCyan.withValues(alpha: 0.1),
+              color: AppColors.cyan.withValues(alpha: 0.1),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.skip_previous, size: 16, color: Colors.white70),
-                    onPressed: () => _stepReview(-_reviewIndex - 1),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.white70),
-                    onPressed: () => _stepReview(-1),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white70),
-                    onPressed: () => _stepReview(1),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.skip_next, size: 16, color: Colors.white70),
-                    onPressed: () => _stepReview(_moveHistory.length - _reviewIndex - 1),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
+                  IconButton(icon: const Icon(Icons.skip_previous, size: 16, color: Colors.white70), onPressed: () => _stepReview(-_reviewIndex - 1), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                  IconButton(icon: const Icon(Icons.arrow_back_ios, size: 16, color: Colors.white70), onPressed: () => _stepReview(-1), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                  IconButton(icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white70), onPressed: () => _stepReview(1), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                  IconButton(icon: const Icon(Icons.skip_next, size: 16, color: Colors.white70), onPressed: () => _stepReview(_moveHistory.length - _reviewIndex - 1), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                 ],
               ),
             ),
@@ -977,49 +896,19 @@ Widget _scoreStat(String label, int val, Color color) {
                 int moveNum = index + 1;
                 String whiteMove = '';
                 String blackMove = '';
-                if (index * 2 < _moveHistory.length) {
-                  whiteMove = _moveHistory[index * 2].notation;
-                }
-                if (index * 2 + 1 < _moveHistory.length) {
-                  blackMove = _moveHistory[index * 2 + 1].notation;
-                }
+                if (index * 2 < _moveHistory.length) whiteMove = _moveHistory[index * 2].notation;
+                if (index * 2 + 1 < _moveHistory.length) blackMove = _moveHistory[index * 2 + 1].notation;
                 bool isWhiteHighlight = index * 2 == _reviewIndex;
                 bool isBlackHighlight = index * 2 + 1 == _reviewIndex;
 
                 return Container(
                   padding: const EdgeInsets.symmetric(vertical: 2),
-                  color: isWhiteHighlight
-                      ? kNeonCyan.withValues(alpha: 0.2)
-                      : isBlackHighlight
-                          ? kNeonPink.withValues(alpha: 0.2)
-                          : null,
+                  color: isWhiteHighlight ? AppColors.cyan.withValues(alpha: 0.2) : (isBlackHighlight ? AppColors.pink.withValues(alpha: 0.2) : null),
                   child: Row(
                     children: [
-                      SizedBox(
-                        width: 20,
-                        child: Text(
-                          "$moveNum.",
-                          style: const TextStyle(color: Colors.white38, fontSize: 9),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          whiteMove,
-                          style: TextStyle(
-                            color: isWhiteHighlight ? kNeonCyan : Colors.white,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          blackMove,
-                          style: TextStyle(
-                            color: isBlackHighlight ? kNeonPink : Colors.white,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
+                      SizedBox(width: 20, child: Text("$moveNum.", style: const TextStyle(color: Colors.white38, fontSize: 9))),
+                      Expanded(child: Text(whiteMove, style: TextStyle(color: isWhiteHighlight ? AppColors.cyan : Colors.white, fontSize: 10))),
+                      Expanded(child: Text(blackMove, style: TextStyle(color: isBlackHighlight ? AppColors.pink : Colors.white, fontSize: 10))),
                     ],
                   ),
                 );
@@ -1033,7 +922,7 @@ Widget _scoreStat(String label, int val, Color color) {
 
   Widget _getPieceIcon(String p) {
     if (p.isEmpty) return const SizedBox();
-    final color = _isWhite(p) ? Colors.white : kNeonPink;
+    final color = _isWhite(p) ? Colors.white : AppColors.pink;
     IconData icon;
     switch (p.toLowerCase()) {
       case 'p': icon = Icons.person_outline; break;
@@ -1044,12 +933,7 @@ Widget _scoreStat(String label, int val, Color color) {
       case 'k': icon = Icons.military_tech_rounded; break;
       default: return const SizedBox();
     }
-    return Icon(
-      icon,
-      color: color,
-      size: 24,
-      shadows: [Shadow(color: color.withValues(alpha: 0.5), blurRadius: 10)],
-    );
+    return Icon(icon, color: color, size: 24, shadows: [Shadow(color: color.withValues(alpha: 0.5), blurRadius: 10)]);
   }
 }
 
@@ -1083,4 +967,59 @@ class MoveRecord {
     this.promotion,
     this.castle,
   });
+}
+
+class ChessLaunchDialog extends StatefulWidget {
+  const ChessLaunchDialog({super.key});
+
+  @override
+  State<ChessLaunchDialog> createState() => _ChessLaunchDialogState();
+}
+
+class _ChessLaunchDialogState extends State<ChessLaunchDialog> {
+  final p1Controller = TextEditingController(text: "Player White");
+  final p2Controller = TextEditingController(text: "Player Black");
+
+  @override
+  void dispose() {
+    p1Controller.dispose();
+    p2Controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+      child: AlertDialog(
+        backgroundColor: AppColors.bg.withValues(alpha: 0.9),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(25),
+          side: const BorderSide(color: AppColors.glassBorder),
+        ),
+        title: const NeonText(text: "INITIALIZE CHESS", color: AppColors.amber, fontSize: 14),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GlassInput(controller: p1Controller, hint: "Player White", accentColor: Colors.white),
+            const SizedBox(height: 15),
+            GlassInput(controller: p2Controller, hint: "Player Black", accentColor: Colors.white54),
+            const SizedBox(height: 25),
+            GlassButton(
+              label: "LAUNCH",
+              color: AppColors.amber,
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(context, slideUpRoute(page: ChessGame(p1: p1Controller.text, p2: p2Controller.text)));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void showChessDialog(BuildContext context) {
+  showDialog(context: context, builder: (context) => const ChessLaunchDialog());
 }

@@ -3,6 +3,14 @@ import 'package:path/path.dart';
 import '../models/game.dart';
 import '../models/game_score.dart';
 
+class DatabaseException implements Exception {
+  final String message;
+  DatabaseException(this.message);
+  
+  @override
+  String toString() => message;
+}
+
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   static Database? _database;
@@ -85,91 +93,156 @@ class DatabaseService {
   }
 
   Future<int> saveGame(Game game) async {
-    final db = await database;
-    int id = await db.insert(game.type.tableName, game.toMap());
-    return id;
+    try {
+      final db = await database;
+      int id = await db.insert(game.type.tableName, game.toMap());
+      return id;
+    } catch (e) {
+      throw DatabaseException('Failed to save game: $e');
+    }
   }
 
   Future<void> saveGameScore(GameScore score) async {
-    final db = await database;
-    final tableName = GameType.values[score.gameId].tableName;
-    await db.insert('${tableName}_scores', score.toMap());
+    try {
+      final db = await database;
+      final tableName = GameType.values[score.gameId].tableName;
+      await db.insert('${tableName}_scores', score.toMap());
+    } catch (e) {
+      throw DatabaseException('Failed to save game score: $e');
+    }
   }
 
   Future<List<Game>> getGamesByType(GameType type, {int limit = 50}) async {
-    final db = await database;
-    List<Map<String, dynamic>> maps = await db.query(
-      type.tableName,
-      orderBy: 'playedAt DESC',
-      limit: limit,
-    );
-    return maps.map((m) => Game.fromMap(m)).toList();
+    try {
+      final db = await database;
+      List<Map<String, dynamic>> maps = await db.query(
+        type.tableName,
+        orderBy: 'playedAt DESC',
+        limit: limit,
+      );
+      return maps.map((m) => Game.fromMap(m)).toList();
+    } catch (e) {
+      throw DatabaseException('Failed to get games: $e');
+    }
   }
 
   Future<List<GameScore>> getTopScores(GameType type, {int limit = 10}) async {
-    final db = await database;
-    List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT playerName, 
-             SUM(wins) as wins,
-             SUM(losses) as losses,
-             SUM(draws) as draws,
-             SUM(totalPoints) as totalPoints
-      FROM ${type.tableName}_scores
-      GROUP BY playerName
-      ORDER BY totalPoints DESC
-      LIMIT ?
-    ''', [limit]);
-    return maps.map((m) => GameScore(
-      playerName: m['playerName'] as String,
-      gameId: type.index,
-      wins: m['wins'] as int? ?? 0,
-      losses: m['losses'] as int? ?? 0,
-      draws: m['draws'] as int? ?? 0,
-      totalPoints: m['totalPoints'] as int? ?? 0,
-    )).toList();
+    try {
+      final db = await database;
+      List<Map<String, dynamic>> maps = await db.rawQuery('''
+        SELECT playerName, 
+               SUM(wins) as wins,
+               SUM(losses) as losses,
+               SUM(draws) as draws,
+               SUM(totalPoints) as totalPoints
+        FROM ${type.tableName}_scores
+        GROUP BY playerName
+        ORDER BY totalPoints DESC
+        LIMIT ?
+      ''', [limit]);
+      return maps.map((m) => GameScore(
+        playerName: m['playerName'] as String,
+        gameId: type.index,
+        wins: m['wins'] as int? ?? 0,
+        losses: m['losses'] as int? ?? 0,
+        draws: m['draws'] as int? ?? 0,
+        totalPoints: m['totalPoints'] as int? ?? 0,
+      )).toList();
+    } catch (e) {
+      throw DatabaseException('Failed to get top scores: $e');
+    }
   }
 
   Future<Map<String, int>> getPlayerStats(String playerName) async {
-    final db = await database;
-    Map<String, int> stats = {'wins': 0, 'draws': 0, 'losses': 0, 'totalGames': 0};
-    
-    for (var gameType in GameType.values) {
-      final result = await db.rawQuery('''
-        SELECT SUM(wins) as w, SUM(draws) as d, SUM(losses) as l
-        FROM ${gameType.tableName}_scores
-        WHERE playerName = ?
-      ''', [playerName]);
+    try {
+      final db = await database;
+      Map<String, int> stats = {'wins': 0, 'draws': 0, 'losses': 0, 'totalGames': 0};
       
-      if (result.isNotEmpty) {
-        stats['wins'] = (stats['wins'] ?? 0) + (result.first['w'] as int? ?? 0);
-        stats['draws'] = (stats['draws'] ?? 0) + (result.first['d'] as int? ?? 0);
-        stats['losses'] = (stats['losses'] ?? 0) + (result.first['l'] as int? ?? 0);
+      for (var gameType in GameType.values) {
+        final result = await db.rawQuery('''
+          SELECT SUM(wins) as w, SUM(draws) as d, SUM(losses) as l
+          FROM ${gameType.tableName}_scores
+          WHERE playerName = ?
+        ''', [playerName]);
+        
+        if (result.isNotEmpty) {
+          stats['wins'] = (stats['wins'] ?? 0) + (result.first['w'] as int? ?? 0);
+          stats['draws'] = (stats['draws'] ?? 0) + (result.first['d'] as int? ?? 0);
+          stats['losses'] = (stats['losses'] ?? 0) + (result.first['l'] as int? ?? 0);
+        }
       }
+      
+      stats['totalGames'] = stats['wins']! + stats['draws']! + stats['losses']!;
+      return stats;
+    } catch (e) {
+      throw DatabaseException('Failed to get player stats: $e');
     }
-    
-    stats['totalGames'] = stats['wins']! + stats['draws']! + stats['losses']!;
-    return stats;
   }
 
   Future<void> updateOrCreatePlayer(String name) async {
-    final db = await database;
-    await db.insert('players', {'name': name}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    try {
+      final db = await database;
+      await db.insert('players', {'name': name}, conflictAlgorithm: ConflictAlgorithm.ignore);
+      
+      final statsResult = await db.rawQuery('''
+        SELECT 
+          SUM(wins) as totalWins,
+          SUM(draws) as totalDraws,
+          SUM(losses) as totalLosses,
+          SUM(totalPoints) as totalScore
+        FROM (
+          SELECT wins, draws, losses, totalPoints FROM ticTacToe_scores WHERE playerName = ?
+          UNION ALL
+          SELECT wins, draws, losses, totalPoints FROM seaBattle_scores WHERE playerName = ?
+          UNION ALL
+          SELECT wins, draws, losses, totalPoints FROM chess_scores WHERE playerName = ?
+          UNION ALL
+          SELECT wins, draws, losses, totalPoints FROM checkers_scores WHERE playerName = ?
+        )
+      ''', [name, name, name, name]);
+      
+      if (statsResult.isNotEmpty) {
+        final stats = statsResult.first;
+        await db.update(
+          'players',
+          {
+            'wins': stats['totalWins'] as int? ?? 0,
+            'draws': stats['totalDraws'] as int? ?? 0,
+            'losses': stats['totalLosses'] as int? ?? 0,
+            'totalScore': stats['totalScore'] as int? ?? 0,
+            'totalGames': ((stats['totalWins'] as int? ?? 0) + (stats['totalDraws'] as int? ?? 0) + (stats['totalLosses'] as int? ?? 0)),
+          },
+          where: 'name = ?',
+          whereArgs: [name],
+        );
+      }
+    } catch (e) {
+      throw DatabaseException('Failed to update player: $e');
+    }
   }
 
   Future<void> deleteDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'gamehub.db');
-    await databaseFactory.deleteDatabase(path);
-    _database = null;
+    try {
+      final dbPath = await getDatabasesPath();
+      final path = join(dbPath, 'gamehub.db');
+      await databaseFactory.deleteDatabase(path);
+      _database = null;
+    } catch (e) {
+      throw DatabaseException('Failed to delete database: $e');
+    }
   }
 
   Future<void> resetAllData() async {
-    final db = await database;
-    for (var gameType in GameType.values) {
-      await db.delete(gameType.tableName);
-      await db.delete('${gameType.tableName}_scores');
+    try {
+      final db = await database;
+      for (var gameType in GameType.values) {
+        await db.delete(gameType.tableName);
+        await db.delete('${gameType.tableName}_scores');
+      }
+      await db.delete('players');
+      _database = null;
+    } catch (e) {
+      throw DatabaseException('Failed to reset data: $e');
     }
-    await db.delete('players');
-    _database = null;
   }
 }

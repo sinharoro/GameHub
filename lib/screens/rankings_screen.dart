@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
+import '../core/app_theme.dart';
+import '../core/app_widgets.dart';
 import '../models/game.dart';
 import '../models/game_score.dart';
 import '../services/database_service.dart';
-
-const Color kBg = Color(0xFF0D1117);
-const Color kGlassBase = Color(0x1AFFFFFF);
-const Color kGlassBorder = Color(0x33FFFFFF);
-const Color kNeonCyan = Color(0xFF00FBFF);
-const Color kNeonPink = Color(0xFFFF006E);
 
 class RankingsScreen extends StatefulWidget {
   const RankingsScreen({super.key});
@@ -30,11 +26,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBg,
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('RANKINGS', style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w900, color: Colors.white)),
+        title: const NeonText(text: "RANKINGS", color: Colors.white, fontSize: 18),
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white70), onPressed: () => Navigator.pop(context)),
       ),
@@ -44,9 +40,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
             padding: const EdgeInsets.all(16),
             child: Container(
               decoration: BoxDecoration(
-                color: kGlassBase.withValues(alpha: 0.3),
+                color: AppColors.glassBase.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: kGlassBorder),
+                border: Border.all(color: AppColors.glassBorder),
               ),
               child: TextField(
                 controller: _nameController,
@@ -72,17 +68,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return FutureBuilder<List<GameScore>>(
       future: _getCombinedRankings(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(
-            child: CircularProgressIndicator(color: kNeonCyan),
-          );
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.cyan));
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
         }
         List<GameScore> rankings = snapshot.data!;
 
         if (_searchQuery.isNotEmpty) {
-          rankings = rankings.where((p) =>
-              p.playerName.toLowerCase().contains(_searchQuery)
-          ).toList();
+          rankings = rankings.where((p) => p.playerName.toLowerCase().contains(_searchQuery)).toList();
         }
 
         if (rankings.isEmpty) {
@@ -90,12 +85,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.leaderboard_outlined, color: Colors.white24, size: 60),
+                const Icon(Icons.leaderboard_outlined, color: Colors.white24, size: 60),
                 const SizedBox(height: 16),
-                Text(
-                  _searchQuery.isEmpty ? 'No rankings yet' : 'No results found',
-                  style: const TextStyle(color: Colors.white54),
-                ),
+                Text(_searchQuery.isEmpty ? 'No rankings yet' : 'No results found', style: const TextStyle(color: Colors.white54)),
               ],
             ),
           );
@@ -108,19 +100,20 @@ class _RankingsScreenState extends State<RankingsScreen> {
             final player = rankings[index];
             final isTop3 = index < 3;
             final rankBadge = isTop3 ? _getRankBadge(index) : null;
+            int totalGames = player.wins + player.losses + player.draws;
+            double winRate = totalGames > 0 ? (player.wins / totalGames * 100) : 0.0;
+
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isTop3
-                      ? [kNeonCyan.withValues(alpha: 0.1), kNeonPink.withValues(alpha: 0.1)]
-                      : [kGlassBase.withValues(alpha: 0.3), kGlassBase.withValues(alpha: 0.2)],
+                      ? [AppColors.cyan.withValues(alpha: 0.1), AppColors.pink.withValues(alpha: 0.1)]
+                      : [AppColors.glassBase.withValues(alpha: 0.3), AppColors.glassBase.withValues(alpha: 0.2)],
                 ),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isTop3 ? (rankBadge ?? kNeonCyan) : kGlassBorder,
-                ),
+                border: Border.all(color: isTop3 ? (rankBadge ?? AppColors.cyan) : AppColors.glassBorder),
               ),
               child: Row(
                 children: [
@@ -128,20 +121,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: isTop3
-                          ? (rankBadge ?? kNeonCyan).withValues(alpha: 0.2)
-                          : Colors.transparent,
+                      color: isTop3 ? (rankBadge ?? AppColors.cyan).withValues(alpha: 0.2) : Colors.transparent,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isTop3 ? (rankBadge ?? kNeonCyan) : Colors.white24,
-                      ),
+                      border: Border.all(color: isTop3 ? (rankBadge ?? AppColors.cyan) : Colors.white24),
                     ),
                     child: Center(
-                      child: Text('#${index + 1}',
-                          style: TextStyle(
-                              color: isTop3 ? rankBadge ?? kNeonCyan : Colors.white54,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14)),
+                      child: Text('#${index + 1}', style: TextStyle(color: isTop3 ? rankBadge ?? AppColors.cyan : Colors.white54, fontWeight: FontWeight.bold, fontSize: 14)),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -149,19 +134,17 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(player.playerName,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: Colors.white)),
+                        Text(player.playerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            _statChip('W', player.wins, kNeonCyan),
+                            _statChip('W', player.wins, AppColors.cyan),
                             const SizedBox(width: 8),
                             _statChip('D', player.draws, Colors.white54),
                             const SizedBox(width: 8),
-                            _statChip('L', player.losses, kNeonPink),
+                            _statChip('L', player.losses, AppColors.pink),
+                            const SizedBox(width: 12),
+                            _winRateBadge(winRate),
                           ],
                         ),
                       ],
@@ -169,13 +152,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   ),
                   Column(
                     children: [
-                      Text('${player.totalPoints}',
-                          style: const TextStyle(
-                              color: kNeonCyan,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 24)),
-                      const Text('PTS',
-                          style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      Text('${player.totalPoints}', style: const TextStyle(color: AppColors.cyan, fontWeight: FontWeight.bold, fontSize: 24)),
+                      const Text('PTS', style: TextStyle(color: Colors.white54, fontSize: 10)),
                     ],
                   ),
                 ],
@@ -187,29 +165,51 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
+  Widget _winRateBadge(double winRate) {
+    Color badgeColor;
+    if (winRate >= 60) {
+      badgeColor = AppColors.green;
+    } else if (winRate >= 40) {
+      badgeColor = AppColors.amber;
+    } else {
+      badgeColor = AppColors.pink;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: badgeColor.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.5)),
+      ),
+      child: Text('${winRate.toStringAsFixed(0)}%', style: TextStyle(color: badgeColor, fontSize: 9, fontWeight: FontWeight.bold)),
+    );
+  }
+
   Widget _statChip(String label, int value, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(4),
-      ),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
       child: Text('$label:$value', style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
   Color? _getRankBadge(int index) {
-    const kMedalGold = Color(0xFFFFD700);
-    const kMedalSilver = Color(0xFFA9A9A9);
-    const kMedalBronze = Color(0xFFCD7F32);
-    final badges = [kMedalGold, kMedalSilver, kMedalBronze];
+    final badges = [AppColors.medalGold, AppColors.medalSilver, AppColors.medalBronze];
     return index < badges.length ? badges[index] : null;
   }
 
   Future<List<GameScore>> _getCombinedRankings() async {
+    List<List<GameScore>> allScores = await Future.wait([
+      _db.getTopScores(GameType.ticTacToe, limit: 20),
+      _db.getTopScores(GameType.seaBattle, limit: 20),
+      _db.getTopScores(GameType.chess, limit: 20),
+      _db.getTopScores(GameType.checkers, limit: 20),
+    ]);
+
     Map<String, GameScore> combined = {};
-    for (var type in GameType.values) {
-      final scores = await _db.getTopScores(type, limit: 20);
+
+    for (List<GameScore> scores in allScores) {
       for (var score in scores) {
         if (combined.containsKey(score.playerName)) {
           final existing = combined[score.playerName]!;
@@ -224,6 +224,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         }
       }
     }
+
     final list = combined.values.toList();
     list.sort((a, b) => b.totalPoints.compareTo(a.totalPoints));
     return list;

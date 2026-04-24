@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
+import '../core/app_theme.dart';
+import '../core/app_widgets.dart';
 import '../models/game.dart';
 import '../models/game_score.dart';
 import '../services/database_service.dart';
-
-const Color kBg = Color(0xFF0D1117);
-const Color kGlassBase = Color(0x1AFFFFFF);
-const Color kGlassBorder = Color(0x33FFFFFF);
-const Color kNeonCyan = Color(0xFF00FBFF);
 
 class ScoresScreen extends StatefulWidget {
   const ScoresScreen({super.key});
@@ -34,17 +31,17 @@ class _ScoresScreenState extends State<ScoresScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBg,
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('SCORES', style: TextStyle(letterSpacing: 4, fontWeight: FontWeight.w900, color: Colors.white)),
+        title: const NeonText(text: "SCORES", color: Colors.white, fontSize: 18),
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white70), onPressed: () => Navigator.pop(context)),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: kNeonCyan,
-          labelColor: kNeonCyan,
+          indicatorColor: AppColors.cyan,
+          labelColor: AppColors.cyan,
           unselectedLabelColor: Colors.white54,
           dividerColor: Colors.transparent,
           tabs: GameType.values.map((t) => Tab(text: t.displayName.toUpperCase())).toList(),
@@ -61,14 +58,20 @@ class _ScoresScreenState extends State<ScoresScreen> with SingleTickerProviderSt
     return FutureBuilder<List<GameScore>>(
       future: _db.getTopScores(type),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.cyan));
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
+        }
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.emoji_events_outlined, color: Colors.white24, size: 60),
-                const SizedBox(height: 16),
-                const Text('No scores yet', style: TextStyle(color: Colors.white54)),
+              children: const [
+                Icon(Icons.emoji_events_outlined, color: Colors.white24, size: 60),
+                SizedBox(height: 16),
+                Text('No scores yet', style: TextStyle(color: Colors.white54)),
               ],
             ),
           );
@@ -84,10 +87,10 @@ class _ScoresScreenState extends State<ScoresScreen> with SingleTickerProviderSt
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: kGlassBase.withValues(alpha: 0.3),
+                color: AppColors.glassBase.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isTop3 ? _getMedalColor(index) : kGlassBorder,
+                  color: isTop3 ? _getMedalColor(index) : AppColors.glassBorder,
                 ),
               ),
               child: Row(
@@ -101,10 +104,7 @@ class _ScoresScreenState extends State<ScoresScreen> with SingleTickerProviderSt
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
-                      child: Text('${index + 1}',
-                          style: TextStyle(
-                              color: isTop3 ? Colors.black : Colors.white24,
-                              fontWeight: FontWeight.bold)),
+                      child: Text('${index + 1}', style: TextStyle(color: isTop3 ? Colors.black : Colors.white24, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -112,24 +112,19 @@ class _ScoresScreenState extends State<ScoresScreen> with SingleTickerProviderSt
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(score.playerName,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, color: Colors.white)),
-                        Text('${score.wins}W - ${score.losses}L - ${score.draws}D',
-                            style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        Text(score.playerName, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                        Text('${score.wins}W - ${score.losses}L - ${score.draws}D', style: const TextStyle(color: Colors.white54, fontSize: 12)),
                       ],
                     ),
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: kNeonCyan.withValues(alpha: 0.2),
+                      color: AppColors.cyan.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: kNeonCyan.withValues(alpha: 0.5)),
+                      border: Border.all(color: AppColors.cyan.withValues(alpha: 0.5)),
                     ),
-                    child: Text('${score.totalPoints} pts',
-                        style: const TextStyle(
-                            color: kNeonCyan, fontWeight: FontWeight.bold)),
+                    child: Text('${score.totalPoints} pts', style: const TextStyle(color: AppColors.cyan, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -141,10 +136,7 @@ class _ScoresScreenState extends State<ScoresScreen> with SingleTickerProviderSt
   }
 
   Color _getMedalColor(int index) {
-    const kMedalGold = Color(0xFFFFD700);
-    const kMedalSilver = Color(0xFFA9A9A9);
-    const kMedalBronze = Color(0xFFCD7F32);
-    final badges = [kMedalGold, kMedalSilver, kMedalBronze];
+    const badges = [AppColors.medalGold, AppColors.medalSilver, AppColors.medalBronze];
     return index < badges.length ? badges[index] : Colors.transparent;
   }
 }
